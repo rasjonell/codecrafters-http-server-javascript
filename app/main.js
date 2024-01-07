@@ -8,6 +8,7 @@ const DIR = process.argv.length === 4 && process.argv[2] === '--directory' ? pro
 
 /**
  * @param {Number} statusCode
+ * @returns {String} response
  */
 const OK = (statusCode = 200) => {
   return `HTTP/1.1 ${statusCode} OK${CRLF}`;
@@ -21,7 +22,7 @@ const server = net.createServer((socket) => {
 
   socket.on('data', (data) => {
     queueMicrotask(() => {
-      const parsedData = parseData(data);
+      const parsedData = parseRequestData(data);
       socket.write(routeRequest(parsedData.path, parsedData));
       socket.end();
     });
@@ -42,7 +43,7 @@ function routeRequest(path, req) {
   if (path === '/user-agent') {
     const data = req.headers['user-agent'];
     if (data) {
-      return plainTextResponse(data);
+      return responseWithBody(data);
     }
 
     return NOT_FOUND;
@@ -50,7 +51,7 @@ function routeRequest(path, req) {
 
   if (path.startsWith('/echo/')) {
     const str = path.substring(6); // starting index after `/echo/`
-    return plainTextResponse(str);
+    return responseWithBody(str);
   }
 
   if (DIR && path.indexOf('/files/') === 0) {
@@ -77,7 +78,7 @@ function routeRequest(path, req) {
  *
  * @returns {Request} data
  */
-function parseData(dataBuf) {
+function parseRequestData(dataBuf) {
   const data = dataBuf.toString();
   const [first, ...rest] = data.split('\r\n');
   const [method, path, version] = first.split(' ');
@@ -111,7 +112,7 @@ function parseData(dataBuf) {
  * @param {String} type
  * @returns {String} response
  */
-function plainTextResponse(data, type = 'text/plain') {
+function responseWithBody(data, type = 'text/plain') {
   return `HTTP/1.1 200 OK\r
 Content-Type: ${type}\r
 Content-Length: ${data.length}\r
@@ -126,7 +127,7 @@ ${data}${CRLF}`;
 function octetStreamResponse(fileName) {
   try {
     const filesContent = fs.readFileSync(path.join(DIR, fileName)).toString();
-    return plainTextResponse(filesContent, 'application/octet-stream');
+    return responseWithBody(filesContent, 'application/octet-stream');
   } catch {
     return NOT_FOUND;
   }
