@@ -14,13 +14,32 @@ const server = net.createServer((socket) => {
     const parsedData = parseData(data);
     console.log('[Socket] data received', parsedData);
 
-    socket.write(
-      parsedData.path === '/' ? `HTTP/1.1 200 OK${CRLF}` : `HTTP/1.1 404 Not Found${CRLF}`,
-    );
+    socket.write(routeRequest(parsedData.path));
 
     socket.end();
   });
 });
+
+/**
+ * @param path {String}
+ */
+function routeRequest(path) {
+  if (path === '/') {
+    return `HTTP/1.1 200 OK${CRLF}`;
+  }
+
+  if (path.startsWith('/echo/')) {
+    const str = path.substring(6); // starting index after `/echo/`
+    return `HTTP/1.1 200 OK\r
+Content-Type: text/plain\r
+Content-Length: ${str.length}\r
+\r
+${str}\r
+`;
+  }
+
+  return `HTTP/1.1 404 Not Found${CRLF}`;
+}
 
 /**
  * @param dataBuf {Buffer}
