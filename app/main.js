@@ -4,8 +4,14 @@ const path = require('path');
 
 const CRLF = '\r\n\r\n';
 const NOT_FOUND = `HTTP/1.1 404 Not Found${CRLF}`;
-
 const DIR = process.argv.length === 4 && process.argv[2] === '--directory' ? process.argv[3] : null;
+
+/**
+ * @param {Number} statusCode
+ */
+const OK = (statusCode = 200) => {
+  return `HTTP/1.1 ${statusCode} OK${CRLF}`;
+};
 
 const server = net.createServer((socket) => {
   socket.on('close', () => {
@@ -30,7 +36,7 @@ const server = net.createServer((socket) => {
  */
 function routeRequest(path, req) {
   if (path === '/') {
-    return `HTTP/1.1 200 OK${CRLF}`;
+    return OK();
   }
 
   if (path === '/user-agent') {
@@ -47,9 +53,13 @@ function routeRequest(path, req) {
     return plainTextResponse(str);
   }
 
-  if (path.indexOf('/files/') === 0) {
+  if (DIR && path.indexOf('/files/') === 0) {
     const fileName = path.substring(7); // starting index after `/files/`
-    return octetStreamResponse(fileName);
+    if (req.method.toLowerCase() === 'get') {
+      return octetStreamResponse(fileName);
+    }
+
+    return createFileResponse(fileName, req.body);
   }
 
   return NOT_FOUND;
@@ -60,6 +70,7 @@ function routeRequest(path, req) {
  *
  * @typedef {Object} Request
  * @property {String} path
+ * @property {String} body
  * @property {String} method
  * @property {String} version
  * @property {Object.<string, string>} headers
@@ -71,12 +82,16 @@ function parseData(dataBuf) {
   const [first, ...rest] = data.split('\r\n');
   const [method, path, version] = first.split(' ');
 
+  let body = '';
   const headers = {};
-  for (const line of rest) {
+  while (true) {
+    const line = rest.shift();
     const seperatorStart = line.indexOf(': ');
     if (seperatorStart === -1) {
-      continue;
+      body = rest.shift();
+      break;
     }
+
     const key = line.substring(0, seperatorStart);
     const value = line.substring(key.length + 2);
     headers[key.toLowerCase()] = value;
@@ -84,6 +99,7 @@ function parseData(dataBuf) {
 
   return {
     path,
+    body,
     method,
     version,
     headers,
@@ -100,8 +116,7 @@ function plainTextResponse(data, type = 'text/plain') {
 Content-Type: ${type}\r
 Content-Length: ${data.length}\r
 \r
-${data}\r
-`;
+${data}${CRLF}`;
 }
 
 /**
@@ -109,14 +124,24 @@ ${data}\r
  * @returns {String} response
  */
 function octetStreamResponse(fileName) {
-  if (!DIR) {
-    return NOT_FOUND;
-  }
-
   try {
     const filesContent = fs.readFileSync(path.join(DIR, fileName)).toString();
     return plainTextResponse(filesContent, 'application/octet-stream');
   } catch {
+    return NOT_FOUND;
+  }
+}
+
+/**
+ * @param {String} fileName
+ * @param {String} content
+ * @returns {String} response
+ */
+function createFileResponse(fileName, content) {
+  try {
+    fs.writeFileSync(path.join(DIR, fileName), content);
+    return OK(201);
+  } catch (error) {
     return NOT_FOUND;
   }
 }
