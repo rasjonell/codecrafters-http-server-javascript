@@ -12,12 +12,12 @@ const server = net.createServer((socket) => {
   });
 
   socket.on('data', (data) => {
-    const parsedData = parseData(data);
-    console.log('[Socket] data received', parsedData);
-
-    socket.write(routeRequest(parsedData.path, parsedData));
-
-    socket.end();
+    queueMicrotask(() => {
+      const parsedData = parseData(data);
+      console.log('[Socket] data received', parsedData);
+      socket.write(routeRequest(parsedData.path, parsedData));
+      socket.end();
+    });
   });
 });
 
@@ -33,7 +33,7 @@ function routeRequest(path, req) {
   }
 
   if (path === '/user-agent') {
-    const data = req.headers['User-Agent'];
+    const data = req.headers['user-agent'];
     if (data) {
       return plainTextResponse(data);
     }
@@ -73,7 +73,7 @@ function parseData(dataBuf) {
     }
     const key = line.substring(0, seperatorStart);
     const value = line.substring(key.length + 2);
-    headers[key] = value;
+    headers[key.toLowerCase()] = value;
   }
 
   return {
